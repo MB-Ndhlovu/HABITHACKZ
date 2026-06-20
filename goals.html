@@ -93,10 +93,10 @@ function bind() {
   document.getElementById('saveBtn').onclick = () => {
     const g = Array.from(document.querySelectorAll('#goalGrid .chip.selected')).map(el => el.dataset.id);
     const i = Array.from(document.querySelectorAll('#interestGrid .chip.selected')).map(el => el.dataset.id);
-    if (!g.length || !i.length) { HQ.toast('Pick at least one goal and one interest.', true); return; }
+    if (!g.length || !i.length) { HQ.toast('Pick at least one goal and one interest.'); return; }
     user.goals = g;
     user.interests = i;
-    HQ.saveUser(user);
+    HQ.updateUser(user.id, { goals: g, interests: i });
     HQ.toast('Goals saved! +20 XP 🎯');
     HQ.addXP(user.id, 20);
     setTimeout(() => window.location.href = isNew ? 'dashboard.html' : 'profile.html', 600);
