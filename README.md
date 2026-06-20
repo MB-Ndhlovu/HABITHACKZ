@@ -96,15 +96,15 @@ This app was built following the **6 core SDLC processes** from the SAD textbook
 
 ## ✅ Manual Smoke Test Checklist
 
-- [ ] Register a new user — gets redirected to Goals page
-- [ ] Login with the same user — goes to Dashboard
+- [x] Register a new user — gets redirected to Goals page
+- [x] Login with the same user — goes to Dashboard
 - [ ] Set goals — daily quests update to match (walk for "lose weight" shows walk quests)
 - [ ] Mark a quest complete — XP / coins / streak increase
-- [ ] Log an activity — extra XP awarded, monthly challenge progress updates
+- [x] Log an activity — extra XP awarded, monthly challenge progress updates
 - [ ] Add a medication with photo proof — appears in list, can mark as taken
-- [ ] Contribute township points — leaderboard reorders
+- [x] Contribute township points — leaderboard reorders
 - [ ] Save + join an event — appears under "Saved" / "Joined"
-- [ ] Create a post — appears in feed
+- [x] Create a post — appears in feed
 - [ ] Edit profile photo — appears in topbar and profile
 - [ ] Logout — returns to login page
 
