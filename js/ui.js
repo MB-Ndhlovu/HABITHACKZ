@@ -3,7 +3,10 @@ function renderTopbar(title, user) {
   const streak = HQ.getStreak(user.id);
   return `
     <div class="topbar">
-      <h1>${title}</h1>
+      <div class="topbar-left">
+        <div class="topbar-avatar">${renderProfilePhoto(user, 32)}</div>
+        <h1>${title}</h1>
+      </div>
       <div class="streak-badge" title="Daily streak">🔥 ${streak.count}</div>
     </div>
   `;

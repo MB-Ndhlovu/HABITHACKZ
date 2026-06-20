@@ -1,6 +1,6 @@
 # 🌿 HealthQuest — A Gamified Township Health & Fitness App
 
-A mobile-first web app that turns healthy living into a quest. Built for the **MCOA021 — Systems Analysis and Design** project.
+HealthQuest is a mobile-first web app that turns healthy living into a quest. It was built for the **MCOA021 — Systems Analysis and Design** project.
 
 > ✨ *"Your town. Your health. Your quest."*
 
@@ -8,109 +8,84 @@ A mobile-first web app that turns healthy living into a quest. Built for the **M
 
 ## 🚀 Quick Start
 
-1. **Open `index.html`** in any modern browser (Chrome, Edge, Firefox, Safari).
-2. Click **"Create Account"** to register.
-3. Set your **goals** and you're ready to start your first quest!
+1. Open `index.html` in a modern browser.
+2. Create an account.
+3. Set your goals and interests.
+4. Use the dashboard, quests, activity, medication, community, events, and profile pages to test the flows.
 
-No build step. No server. No install. Everything runs in the browser, data persists in `localStorage`.
-
-To test with multiple users, open in an Incognito window for a second account.
+No build step. No server. No install. Data currently persists in `localStorage`.
 
 ---
 
-## 🎮 The 11 Core Features
+## ✅ Current Status
+
+This repo now has a working static MVP slice with:
+
+- registration and login
+- goal and interest setup
+- quest generation and completion
+- XP, coins, streaks, ranks, and badges
+- activity logging
+- medication tracking with photo proof
+- township rankings and feed posts
+- event saving and joining
+- profile editing and photo upload
+
+---
+
+## 🧭 Best Starting Point for the Next Developer
+
+Read these files in this order:
+
+1. `AGENTS.md` — handoff and MVP path
+2. `README.md` — high-level product summary
+3. `HealthQuest_App_SAD_Plan.md` — project scope and iteration plan
+4. `js/storage.js` — data model and persistence layer
+5. `js/quests.js` — quest engine
+6. `js/ui.js` — shared UI helpers
+
+If you are continuing development, start with the MVP path in `AGENTS.md`.
+
+---
+
+## 🎮 Core Features
 
 | # | Feature | Pages |
 |---|---------|-------|
-| 1 | **User Accounts** — Register, login, edit profile, upload photo | `index.html`, `register.html`, `profile.html` |
-| 2 | **Goal Setup** — Health goals (lose weight, manage diabetes…) + interests (walking, soccer…) | `goals.html` |
-| 3 | **Quest System** — Daily & weekly quests, mark complete | `quests.html` |
-| 4 | **Reward System** — XP, Coins, Badges, Ranks (Bronze → Diamond) | `dashboard.html`, `profile.html` |
-| 5 | **Streak System** — Always-visible 🔥 streak counter, daily reset | All pages (topbar) |
-| 6 | **Dashboard** — Streak, Rank, XP, today's quests, township ranking | `dashboard.html` |
-| 7 | **Activity Logging** — Log walk, run, soccer, gym (type / duration / distance) | `activity.html` |
-| 8 | **Medication Tracking** — Add meds, set reminders, upload proof | `medication.html` |
-| 9 | **Community Challenges** — Township leaderboards, monthly challenges | `community.html` |
-| 10 | **Activity & Event Discovery** — Browse events, save, join | `events.html` |
-| 11 | **Community Feed** — Posts, likes, comments | `community.html` (Feed tab) |
+| 1 | User accounts | `index.html`, `register.html`, `profile.html` |
+| 2 | Goal setup | `goals.html` |
+| 3 | Quest system | `quests.html` |
+| 4 | Reward system | `dashboard.html`, `profile.html` |
+| 5 | Streak system | All pages via the topbar |
+| 6 | Dashboard | `dashboard.html` |
+| 7 | Activity logging | `activity.html` |
+| 8 | Medication tracking | `medication.html` |
+| 9 | Community challenges | `community.html` |
+| 10 | Events discovery | `events.html` |
+| 11 | Community feed | `community.html` |
 
 ---
 
-## 🏗️ Architecture (SAD-grounded)
+## 🏗️ Architecture
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| **Presentation** | `*.html` | One page per major feature; mobile-first responsive |
-| **Style** | `css/styles.css` | Single design system, theme tokens, components |
-| **Domain / Storage** | `js/storage.js` | All data persistence in `localStorage` (HQ object) |
-| **Quest logic** | `js/quests.js` | Quest templates, completion, XP/coin rewards, streak |
-| **Shared UI** | `js/ui.js` | Topbar with streak badge, bottom nav, auth gate |
+| Presentation | `*.html` | One page per major feature |
+| Style | `css/styles.css` | Shared design system |
+| Storage | `js/storage.js` | Users, sessions, activities, meds, community, events |
+| Quests | `js/quests.js` | Quest generation, completion, rewards, badges |
+| UI | `js/ui.js` | Shared page shell helpers |
 
 ---
 
-## 📁 Project Structure
+## 🔎 Development Notes
 
-```
-HABITHACKZ/
-├── index.html              # Login page
-├── register.html           # Register new account
-├── goals.html              # Set health goals + interests
-├── dashboard.html          # App home (streak, rank, today's quests)
-├── quests.html             # Daily + weekly quests
-├── activity.html           # Log physical activity
-├── medication.html         # Medication tracking + photo proof
-├── community.html          # Townships / Challenges / Feed (tabbed)
-├── events.html             # Browse + save + join events
-├── profile.html            # Edit profile, view stats & badges
-├── css/styles.css          # All styling
-└── js/
-    ├── storage.js          # HQ data layer (users, sessions, quests, posts…)
-    ├── quests.js           # Quest generation, completion, rewards
-    └── ui.js               # Shared UI (topbar, bottom nav, auth gate)
-```
+- `user.goals` and `user.interests` are the canonical fields used by quest generation.
+- Community ranking reads township points from local storage.
+- Notification reminders depend on browser permission.
+- The app is still a static demo. For a real MVP, the next step is a backend and proper database.
 
 ---
-
-## 🧠 SAD Concepts Applied
-
-This app was built following the **6 core SDLC processes** from the SAD textbook:
-
-1. **Identify the problem & obtain approval** — see `HealthQuest_App_SAD_Plan.md`
-2. **Plan and monitor the project** — 5-iteration roadmap in the plan
-3. **Discover and understand the details** — Use cases documented per feature
-4. **Design the system components** — UML class diagram in storage.js (HQ.BADGES, HQ.RANKS)
-5. **Build, test, integrate** — Each page is an independently testable module
-6. **Complete system tests & deploy** — Manual smoke test checklist below
-
-### Iteration Map
-
-| Iteration | Focus | Features Delivered |
-|-----------|-------|---------------------|
-| **1** | Foundation | User Accounts (UC1–UC3) + Dashboard skeleton |
-| **2** | Quest Core | Goals (UC4) + Quests (UC5) + Rewards |
-| **3** | Consistency | Streaks + Activity Logging |
-| **4** | Health | Medication Tracking |
-| **5** | Community | Townships + Challenges + Events + Feed + Profile |
-
----
-
-## ✅ Manual Smoke Test Checklist
-
-- [x] Register a new user — gets redirected to Goals page
-- [x] Login with the same user — goes to Dashboard
-- [ ] Set goals — daily quests update to match (walk for "lose weight" shows walk quests)
-- [ ] Mark a quest complete — XP / coins / streak increase
-- [x] Log an activity — extra XP awarded, monthly challenge progress updates
-- [ ] Add a medication with photo proof — appears in list, can mark as taken
-- [x] Contribute township points — leaderboard reorders
-- [ ] Save + join an event — appears under "Saved" / "Joined"
-- [x] Create a post — appears in feed
-- [ ] Edit profile photo — appears in topbar and profile
-- [ ] Logout — returns to login page
-
----
-
-
 
 ## 📜 License
 

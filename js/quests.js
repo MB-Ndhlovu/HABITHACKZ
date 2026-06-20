@@ -467,10 +467,15 @@ HQ.bumpWeeklyProgress = function(userId, baseId, delta) {
 // Award XP/coins for a quest that just completed. Returns { xp, coins, dailyQuest, weeklyQuest }.
 HQ.awardQuestRewards = function(userId, quest) {
   if (!quest) return;
+  const user = HQ.getUser(userId);
   HQ.addXP(userId, quest.xp);
   HQ.addCoins(userId, quest.coins);
   HQ.updateStreak(userId);
-  HQ.checkBadgeUnlocks(HQ.getUser(userId));
+  if (user) {
+    user.completedQuests = (user.completedQuests || 0) + 1;
+    HQ.updateUser(userId, { completedQuests: user.completedQuests });
+  }
+  if (typeof HQ.checkBadgeUnlocks === 'function') HQ.checkBadgeUnlocks(HQ.getUser(userId));
   HQ.recordQuestCompletion(userId);
   HQ.toast(`+${quest.xp} XP, +${quest.coins} coins! 🎉`);
 };

@@ -30,23 +30,9 @@ const HQ = {
   },
 
   // Date helpers used across storage + quests
-  todayKey() {
-    return new Date().toISOString().split('T')[0];
-  },
-  weekKey() {
-    const d = new Date();
-    // ISO week: year + week number
-    const target = new Date(d.valueOf());
-    const dayNr = (d.getDay() + 6) % 7;
-    target.setDate(target.getDate() - dayNr + 3);
-    const firstThursday = target.valueOf();
-    target.setMonth(0, 1);
-    if (target.getDay() !== 4) {
-      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-    }
-    const week = 1 + Math.ceil((firstThursday - target) / 604800000);
-    return d.getFullYear() + '-W' + String(week).padStart(2, '0');
-  },
+  // Note: todayKey(), weekKey(), completeQuest(), checkBadgeUnlocks()
+  // live in js/quests.js. storage.js is loaded first, quests.js second, and
+  // quests.js owns the canonical implementations. Don't redefine them here.
 
   findUserById(id) {
     return this.getUsers().find(u => u.id === id) || null;
@@ -234,13 +220,14 @@ HQ.addXP = function(userId, amount) {
   const user = HQ.findUserById(userId);
   if (!user) return;
   user.xp = (user.xp || 0) + amount;
-  user.completedQuests = (user.completedQuests || 0) + 1;
+  // Note: completedQuests is now incremented only by HQ.awardQuestRewards
+  // (in quests.js) when a quest is actually completed, not on every XP gain.
   const newRank = HQ.rankFromXP(user.xp);
   const promoted = newRank !== user.rank;
   if (promoted) user.rank = newRank;
-  HQ.updateUser(userId, { xp: user.xp, rank: user.rank, completedQuests: user.completedQuests });
+  HQ.updateUser(userId, { xp: user.xp, rank: user.rank });
   if (promoted) HQ.toast(`Promoted to ${newRank}!`);
-  HQ.checkBadgeUnlocks(user);
+  if (typeof HQ.checkBadgeUnlocks === 'function') HQ.checkBadgeUnlocks(user);
 };
 
 HQ.addCoins = function(userId, amount) {
@@ -258,6 +245,13 @@ HQ.addCommunityPoints = function(userId, amount) {
   HQ.set(HQ.KEYS.COMMUNITY_POINTS, map);
 };
 
+HQ.getCommunityPoints = function(township) {
+  const map = this.get(this.KEYS.COMMUNITY_POINTS, {});
+  return map[township] || 0;
+};
+
+// Note: contribute community points via HQ.addCommunityPoints(userId, amount).
+
 HQ.addToTownship = function(township, amount) {
   const townships = this.get(this.KEYS.TOWNSHIPS, []);
   const t = townships.find(x => x.name === township);
@@ -267,17 +261,7 @@ HQ.addToTownship = function(township, amount) {
   }
 };
 
-HQ.checkBadgeUnlocks = function(user) {
-  user.badges = user.badges || [];
-  HQ.BADGES.forEach(b => {
-    if (!user.badges.includes(b.id) && b.check(user)) {
-      user.badges.push(b.id);
-      HQ.toast(`🏅 Badge unlocked: ${b.name}`);
-    }
-  });
-  HQ.updateUser(user.id, { badges: user.badges });
-  return user.badges;
-};
+// Note: HQ.checkBadgeUnlocks is implemented in quests.js (canonical owner).
 
 HQ.getTownshipRankings = function() {
   const townships = HQ.get(HQ.KEYS.TOWNSHIPS, []);
@@ -285,11 +269,6 @@ HQ.getTownshipRankings = function() {
   return townships
     .map(t => ({ ...t, xp: points[t.name] || t.points || 0 }))
     .sort((a, b) => b.xp - a.xp);
-};
-
-HQ.getCurrentMonthlyChallenge = function() {
-  const all = HQ.get(HQ.KEYS.CHALLENGES, []);
-  return all[0] || null;
 };
 
 HQ.MONTHLY_CHALLENGE_TEMPLATES = [
@@ -315,7 +294,7 @@ HQ.logActivity = function(userId, activity) {
   this.addCoins(userId, Math.floor(xp / 6));
   this.addCommunityPoints(userId, Math.floor(xp / 10));
   this.updateStreak(userId);
-  this.checkBadgeUnlocks(this.getUser(userId));
+  if (typeof this.checkBadgeUnlocks === 'function') this.checkBadgeUnlocks(this.getUser(userId));
 
   // Auto-complete daily quests + bump weekly progress for this activity.
   if (typeof HQ.recordActivityForQuests === 'function') {
@@ -351,6 +330,9 @@ HQ.addMedication = function(userId, med) {
   const meds = this.getMedications(userId);
   meds.push({ id: this.uid(), addedAt: Date.now(), ...med });
   this.set(this.KEYS.MEDICATIONS + '_' + userId, meds);
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
   this.setReminder(userId, med);
 };
 
@@ -377,7 +359,7 @@ HQ.logMedication = function(userId, medId, photoProof) {
   this.addXP(userId, 15);
   this.addCoins(userId, 3);
   this.updateStreak(userId);
-  this.checkBadgeUnlocks(this.getUser(userId));
+  if (typeof this.checkBadgeUnlocks === 'function') this.checkBadgeUnlocks(this.getUser(userId));
 
   // Auto-complete daily "medication-taken" quest + bump weekly med-day counter.
   if (typeof HQ.recordActivityForQuests === 'function') {
@@ -471,7 +453,7 @@ HQ.joinEvent = function(userId, eventId) {
   }
   this.addXP(userId, 50);
   this.addCoins(userId, 15);
-  this.checkBadgeUnlocks(eu);
+  if (typeof this.checkBadgeUnlocks === 'function') this.checkBadgeUnlocks(eu);
   if (typeof HQ.bumpWeeklyProgress === 'function') {
     const c = HQ.bumpWeeklyProgress(userId, 'join-event', 1);
     if (c) HQ.awardQuestRewards(userId, c);
@@ -502,44 +484,4 @@ HQ.getUserByUsername = function(username) {
 
 HQ.editProfile = function(userId, updates) {
   return this.updateUser(userId, updates);
-};
-
-HQ.completeQuest = function(userId, questId) {
-  const user = this.getUser(userId);
-  if (!user) return { ok: false, error: 'User not found' };
-  if (typeof this.getQuestsForUser !== 'function') return { ok: false, error: 'Quest system unavailable' };
-  const quests = this.getQuestsForUser(userId);
-  const quest = quests.find(q => q.id === questId);
-  if (!quest) return { ok: false, error: 'Quest not found' };
-  const today = this.todayKey();
-  if (quest.completedDates && quest.completedDates.includes(today)) {
-    return { ok: false, error: 'Quest already completed today' };
-  }
-  if (!quest.completedDates) quest.completedDates = [];
-  quest.completedDates.push(today);
-  this.saveQuestsForUser(userId, quests);
-  this.addXP(userId, quest.xp);
-  this.addCoins(userId, quest.coins);
-  this.updateStreak(userId);
-  this.checkBadgeUnlocks(this.getUser(userId));
-  HQ.toast(`+${quest.xp} XP, +${quest.coins} coins! `);
-  return { ok: true };
-};
-
-HQ.getCommunityPoints = function(township) {
-  const map = this.get(this.KEYS.COMMUNITY_POINTS, {});
-  return map[township] || 0;
-};
-
-HQ.contribute = function(township, amount) {
-  const map = this.get(this.KEYS.COMMUNITY_POINTS, {});
-  map[township] = (map[township] || 0) + amount;
-  this.set(this.KEYS.COMMUNITY_POINTS, map);
-};
-
-HQ.contributeCommunityPoints = function(userId, amount) {
-  const u = this.getUser(userId);
-  if (u && u.township) this.addToTownship(u.township, amount || 10);
-  this.updateUser(userId, { lastCommunityContribute: Date.now() });
-  return u;
 };

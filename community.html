@@ -125,7 +125,6 @@ function render() {
 
 window.contributePoints = function() {
   HQ.addCommunityPoints(user.id, 10);
-  HQ.addToTownship(user.township, 10);
   alert('+10 community points added to ' + user.township + '!');
   render();
 };

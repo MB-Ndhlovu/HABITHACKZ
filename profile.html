@@ -67,9 +67,9 @@ function render() {
 
       <div class="section-header"><h2>🎯 Your Goals</h2></div>
       <div class="card">
-        ${(u.healthGoals || []).length === 0
+        ${(u.goals || []).length === 0
           ? '<p class="muted">No health goals set yet.</p>'
-          : '<div class="chip-row">' + (u.healthGoals || []).map(g => `<span class="chip">${g}</span>`).join('') + '</div>'}
+          : '<div class="chip-row">' + (u.goals || []).map(g => `<span class="chip">${g}</span>`).join('') + '</div>'}
         ${(u.interests || []).length === 0
           ? ''
           : '<div class="chip-row">' + (u.interests || []).map(g => `<span class="chip accent">${g}</span>`).join('') + '</div>'}
