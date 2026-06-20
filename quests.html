@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="theme-color" content="#4CAF50">
+<meta name="theme-color="#4CAF50">
 <title>HealthQuest — Quests</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -16,81 +16,113 @@
 const user = HQ.requireAuth();
 if (!user) throw new Error('not authed');
 
+// Ensure today's dailies + this week's weeklies exist.
 HQ.refreshQuestsForUser(user.id);
+
+function periodKeyFor(quest) {
+  return quest.type === 'weekly' ? HQ.weekKey() : HQ.todayKey();
+}
+
+function isDone(quest) {
+  const k = periodKeyFor(quest);
+  return Array.isArray(quest.completedDates) && quest.completedDates.includes(k);
+}
+
+function progressFraction(quest) {
+  if (isDone(quest)) return 1;
+  const target = quest.target || 0;
+  if (!target) return 0;
+  return Math.min(1, (quest.progress || 0) / target);
+}
 
 function render() {
   const all = HQ.getQuestsForUser(user.id);
-  const daily = all.filter(q => q.type === 'daily');
-  const weekly = all.filter(q => q.type === 'weekly');
-  const completedToday = daily.filter(q => q.completedDates && q.completedDates.includes(HQ.todayKey())).length;
+  const dailies = all.filter(q => q.type === 'daily');
+  const weeklies = all.filter(q => q.type === 'weekly');
+  const doneToday = dailies.filter(isDone).length;
+  const doneWeek = weeklies.filter(isDone).length;
 
-  const result = `
+  const d = `
     ${renderTopbar('🎯 Quests', user)}
     <div class="container">
+
       <div class="card stat-grid">
-        <div><div class="stat-value">${completedToday}/${daily.length}</div><div class="stat-label">Today</div></div>
-        <div><div class="stat-value">${user.xp}</div><div class="stat-label">XP</div></div>
-        <div><div class="stat-value">${user.coins}</div><div class="stat-label">Coins</div></div>
-        <div><div class="stat-value">${HQ.rankIcon(user.rank)}</div><div class="stat-label">${user.rank}</div></div>
+        <div><div class="stat-value">${doneToday}/${dailies.length || 0}</div><div class="stat-label">Dailies done</div></div>
+        <div><div class="stat-value">${doneWeek}/${weeklies.length || 0}</div><div class="stat-label">Weeklies done</div></div>
+        <div><div class="stat-value">${user.xp || 0}</div><div class="stat-label">XP</div></div>
+        <div><div class="stat-value">${user.coins || 0}</div><div class="stat-label">Coins</div></div>
       </div>
 
       <div class="section-header">
         <h2>📅 Daily Quests</h2>
-        <button class="btn-secondary" onclick="HQ.refreshQuestsForUser('${user.id}'); render();">🔄 Refresh</button>
+        <span class="muted">Auto-complete when you log the action</span>
       </div>
-      ${daily.map(q => questCard(q)).join('')}
+      ${dailies.length === 0
+        ? '<div class="card empty-state">No dailies today. Set goals in <a href="goals.html">Goals</a> to personalise.</div>'
+        : dailies.map(dailyCard).join('')}
 
       <div class="section-header">
         <h2>📆 Weekly Quests</h2>
+        <span class="muted">${HQ.weekKey()}</span>
       </div>
-      ${weekly.map(q => questCard(q)).join('') || '<div class="card empty-state">No weekly quests yet — complete more dailies to unlock!</div>'}
+      ${weeklies.length === 0
+        ? '<div class="card empty-state">No weeklies yet. Set goals to unlock.</div>'
+        : weeklies.map(weeklyCard).join('')}
 
       <div class="section-header">
         <h2>🏆 Badges</h2>
       </div>
-      <div class="card stat-grid">
-        ${HQ.BADGES.map(b => {
-          const earned = HQ.checkBadgeUnlocks(user).some(u => u.id === b.id);
-          return `<div class="badge-tile ${earned ? '' : 'locked'}"><div style="font-size:36px">${b.icon}</div><div class="badge-name">${b.name}</div></div>`;
-        }).join('')}
+      <div class="card badge-grid">
+        ${HQ.evaluateBadges(user).map(b => `
+          <div class="badge-tile ${b.owned ? '' : 'locked'}">
+            <div style="font-size:36px">${b.icon}</div>
+            <div class="badge-name">${b.name}</div>
+          </div>
+        `).join('')}
       </div>
+
     </div>
     ${renderBottomNav('quests')}
   `;
-
-  document.getElementById('app').innerHTML = result;
+  document.getElementById('app').innerHTML = d;
 }
 
-function questCard(q) {
-  const tk = HQ.todayKey();
-  if (q.completedDates && q.completedDates.includes(tk)) {
-    return `
-      <div class="card quest-card completed">
-        <div class="quest-icon">${q.icon}</div>
-        <div class="quest-body">
-          <div class="quest-title">${q.title}</div>
-          <div class="quest-meta">✅ Completed · +${q.xp} XP · +${q.coins} 🪙</div>
-        </div>
-      </div>
-    `;
-  }
+function dailyCard(q) {
+  const done = isDone(q);
   return `
-    <div class="card quest-card">
-      <div class="quest-icon">${q.icon}</div>
+    <div class="card quest-card ${done ? 'completed' : ''}">
+      <div class="quest-icon">${done ? '✅' : q.icon}</div>
       <div class="quest-body">
         <div class="quest-title">${q.title}</div>
-        <div class="quest-meta">Reward: +${q.xp} XP · +${q.coins} 🪙</div>
+        <div class="quest-meta">${done
+          ? '✅ Completed · ' + q.xp + ' XP · ' + q.coins + ' 🪙'
+          : 'Reward: +' + q.xp + ' XP · +' + q.coins + ' 🪙'}</div>
       </div>
-      <button class="btn-primary" onclick="completeQuest('${q.id}')">Complete</button>
     </div>
   `;
 }
 
-window.completeQuest = function(questId) {
-  const res = HQ.completeQuest(user.id, questId);
-  if (!res.ok) { alert(res.error); return; }
-  render();
-};
+function weeklyCard(q) {
+  const done = isDone(q);
+  const pct = Math.round(progressFraction(q) * 100);
+  const target = q.target || 0;
+  const showProgress = target > 0;
+  return `
+    <div class="card quest-card ${done ? 'completed' : ''}">
+      <div class="quest-icon">${done ? '✅' : q.icon}</div>
+      <div class="quest-body">
+        <div class="quest-title">${q.title}</div>
+        <div class="quest-meta">${done
+          ? '✅ Completed · ' + q.xp + ' XP · ' + q.coins + ' 🪙'
+          : 'Reward: +' + q.xp + ' XP · +' + q.coins + ' 🪙'}</div>
+        ${showProgress ? `
+          <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-label">${q.progress || 0} / ${target} (${pct}%)</div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
 
 render();
 </script>

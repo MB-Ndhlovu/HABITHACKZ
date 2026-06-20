@@ -317,76 +317,20 @@ HQ.logActivity = function(userId, activity) {
   this.updateStreak(userId);
   this.checkBadgeUnlocks(this.getUser(userId));
 
-  // Quest auto-completion: check active daily quests against this activity
-  const user = this.getUser(userId);
-  if (user && typeof this.getQuestsForUser === 'function') {
-    const today = this.todayKey();
-    const quests = this.getQuestsForUser(userId) || [];
-    quests.forEach(quest => {
-      if (!quest) return;
-      if (quest.type !== 'daily') return;
-      if (quest.completedDates && quest.completedDates.includes(today)) return;
-      if (!this._questMatchesActivity(quest, activity)) return;
-      this.completeQuest(userId, quest.id);
-    });
+  // Auto-complete daily quests + bump weekly progress for this activity.
+  if (typeof HQ.recordActivityForQuests === 'function') {
+    const completed = HQ.recordActivityForQuests(userId, activity);
+    if (completed && completed.dailyCompleted) HQ.awardQuestRewards(userId, completed.dailyCompleted);
+    if (completed && completed.weeklyCompleted) HQ.awardQuestRewards(userId, completed.weeklyCompleted);
   }
 
   // Township auto-contribution: +5 points per activity logged
-  if (user && user.township) {
-    this.addToTownship(user.township, 5);
-  }
-};
-
-HQ._questMatchesActivity = function(quest, activity) {
-  if (!quest || !activity) return false;
-  const title = (quest.title || '').toLowerCase();
-  const type = (activity.type || '').toLowerCase();
-  const actName = (activity.name || '').toLowerCase();
-
-  const keywordMap = {
-    walk: ['walk', 'step'],
-    run: ['run', 'jog', 'jogging'],
-    soccer: ['soccer', 'football'],
-    gym: ['gym', 'workout', 'lift', 'strength'],
-    water: ['water', 'hydrate', 'drink'],
-    meditation: ['meditat', 'mindful', 'breath'],
-    sleep: ['sleep'],
-    meal: ['meal', 'eat', 'food'],
-    smoke: ['smoke', 'smok', 'cigarette', 'vape'],
-    medication: ['med', 'medication', 'pill']
-  };
-  const keywords = keywordMap[type] || (type ? [type] : []);
-  const haystack = title + ' ' + actName;
-  const keywordMatch = keywords.some(k => haystack.includes(k));
-  if (!keywordMatch) return false;
-
-  // Threshold check: parse "3km", "5,000 steps", "2L", "10 minutes" from title
-  const m = title.match(/(\d[\d,.]*)\s*(km|k\b|m\b|l\b|min|minute|step|hour)/);
-  if (m) {
-    const threshold = parseFloat(m[1].replace(/,/g, ''));
-    const unit = m[2];
-    if (unit.startsWith('km') || unit === 'k') {
-      const dist = parseFloat(activity.distance) || 0;
-      if (dist < threshold) return false;
-    } else if (unit === 'm' && !unit.startsWith('km')) {
-      const dist = (parseFloat(activity.distance) || 0) * 1000;
-      if (dist < threshold) return false;
-    } else if (unit === 'l') {
-      const vol = parseFloat(activity.amount) || parseFloat(activity.volume) || 0;
-      if (vol < threshold) return false;
-    } else if (unit === 'step') {
-      const steps = parseInt(activity.steps, 10) || 0;
-      if (steps < threshold) return false;
-    } else if (unit.startsWith('min')) {
-      const dur = parseFloat(activity.duration) || 0;
-      if (dur < threshold) return false;
-    } else if (unit === 'hour') {
-      const dur = parseFloat(activity.duration) || 0;
-      if (dur < threshold * 60) return false;
+  if (userId) {
+    const activityUser = this.getUser(userId);
+    if (activityUser && activityUser.township) {
+      this.addToTownship(activityUser.township, 5);
     }
   }
-
-  return true;
 };
 
 HQ.getActivities = function(userId) {
@@ -434,6 +378,21 @@ HQ.logMedication = function(userId, medId, photoProof) {
   this.addCoins(userId, 3);
   this.updateStreak(userId);
   this.checkBadgeUnlocks(this.getUser(userId));
+
+  // Auto-complete daily "medication-taken" quest + bump weekly med-day counter.
+  if (typeof HQ.recordActivityForQuests === 'function') {
+    const c = HQ.recordActivityForQuests(userId, { type: 'medication' });
+    if (c && c.dailyCompleted) HQ.awardQuestRewards(userId, c.dailyCompleted);
+  }
+  if (typeof HQ.recordMedicationForQuests === 'function') {
+    HQ.recordMedicationForQuests(userId);
+    const quests = HQ.getQuestsForUser(userId) || [];
+    const week = HQ.weekKey();
+    const medWeek = quests.find(q => q.baseId === 'medication-full-week' && (!q.completedDates || !q.completedDates.includes(week)));
+    if (medWeek && medWeek.completedDates && medWeek.completedDates.includes(week)) {
+      HQ.awardQuestRewards(userId, medWeek);
+    }
+  }
 };
 
 HQ.getMedicationLogs = function(userId) {
@@ -502,17 +461,20 @@ HQ.unsaveEvent = function(userId, eventId) {
 };
 HQ.joinEvent = function(userId, eventId) {
   const list = this.get(this.KEYS.JOINED_EVENTS + '_' + userId, []);
-  if (!list.includes(eventId)) {
-    list.push(eventId);
-    this.set(this.KEYS.JOINED_EVENTS + '_' + userId, list);
-    const eu = this.getUser(userId);
-    if (eu) {
-      eu.eventsJoined = (eu.eventsJoined || 0) + 1;
-      this.updateUser(userId, { eventsJoined: eu.eventsJoined });
-    }
-    this.addXP(userId, 50);
-    this.addCoins(userId, 15);
-    this.checkBadgeUnlocks(this.getUser(userId));
+  if (list.includes(eventId)) return;
+  list.push(eventId);
+  this.set(this.KEYS.JOINED_EVENTS + '_' + userId, list);
+  const eu = this.getUser(userId);
+  if (eu) {
+    eu.eventsJoined = (eu.eventsJoined || 0) + 1;
+    this.updateUser(userId, { eventsJoined: eu.eventsJoined });
+  }
+  this.addXP(userId, 50);
+  this.addCoins(userId, 15);
+  this.checkBadgeUnlocks(eu);
+  if (typeof HQ.bumpWeeklyProgress === 'function') {
+    const c = HQ.bumpWeeklyProgress(userId, 'join-event', 1);
+    if (c) HQ.awardQuestRewards(userId, c);
   }
 };
 HQ.getSavedEvents = function(userId) {

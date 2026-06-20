@@ -13,6 +13,7 @@
 <script src="js/ui.js"></script>
 <script src="js/quests.js"></script>
 <script>
+// HealthQuest — Dashboard
 const user = HQ.requireAuth();
 if (!user) throw new Error('not authed');
 
@@ -67,16 +68,21 @@ document.getElementById('app').innerHTML = `
         <h3>Today's Quests</h3>
         <a href="quests.html" class="link">View all →</a>
       </div>
-      ${daily.length === 0 ? '<p class="muted">No quests yet. Visit the quests page to start.</p>' : daily.slice(0, 3).map(q => `
-        <div class="quest-item ${q.completedDates && q.completedDates.includes(HQ.todayKey()) ? 'completed' : ''}">
-          <div class="quest-icon">${q.completedDates && q.completedDates.includes(HQ.todayKey()) ? '✅' : q.icon}</div>
+      ${daily.length === 0 ? '<p class="muted">No quests yet. Visit the quests page to start.</p>' : daily.slice(0, 3).map(q => {
+        const tk = HQ.todayKey();
+        const isDone = q.completedDates && q.completedDates.includes(tk);
+        const trigger = questHint(q);
+        return `
+        <div class="quest-item ${isDone ? 'completed' : ''}">
+          <div class="quest-icon">${isDone ? '✅' : q.icon}</div>
           <div style="flex:1">
             <div style="font-weight:600">${q.title}</div>
-            <div style="font-size:12px;color:var(--text-muted)">+${q.xp} XP · +${q.coins} coins</div>
+            <div style="font-size:12px;color:var(--text-muted)">+${q.xp} XP · +${q.coins} coins${trigger ? ' · ' + trigger : ''}</div>
           </div>
-          ${q.completedDates && q.completedDates.includes(HQ.todayKey()) ? '<span class="quest-status">Done</span>' : `<button class="btn btn-sm btn-primary" onclick="completeQuest('${q.id}')">Done</button>`}
+          ${isDone ? '<span class="quest-status">Done</span>' : '<span class="quest-status muted">Auto</span>'}
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     </div>
 
     <div class="card">
@@ -107,11 +113,22 @@ document.getElementById('app').innerHTML = `
   ${renderBottomNav('dashboard')}
 `;
 
-window.completeQuest = (id) => {
-  HQ.completeQuestForUser(user.id, id);
-  HQ.toast('Quest complete! 🎉');
-  setTimeout(() => location.reload(), 400);
-};
+function questHint(q) {
+  const hints = {
+    'walk-3k-steps': 'log a 3km walk',
+    'walk-5k-steps': 'log a 5km walk',
+    'water-2l': 'log drinking 2L of water',
+    'water-3l': 'log drinking 3L of water',
+    'healthy-meal': 'log a healthy meal',
+    'no-sugar': 'tap to skip sugary drinks',
+    'meditation-10': 'log 10 min meditation',
+    'sleep-7': 'log 7+ hours of sleep',
+    'no-smoke': 'stay smoke-free today',
+    'log-activity': 'log any activity',
+    'medication-taken': 'mark medication taken',
+  };
+  return hints[q.baseId] || '';
+}
 </script>
 </body>
 </html>

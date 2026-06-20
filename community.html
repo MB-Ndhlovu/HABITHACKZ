@@ -133,7 +133,7 @@ window.contributePoints = function() {
 window.createPost = function() {
   const content = document.getElementById('post-content').value.trim();
   if (!content) return;
-  HQ.addPost(user.fullName, user.township, content);
+  HQ.addPost(user.fullName, user.township, content, user.id);
   document.getElementById('post-content').value = '';
   render();
 };
