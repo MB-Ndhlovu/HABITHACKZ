@@ -98,7 +98,7 @@ function bind() {
     user.interests = i;
     HQ.saveUser(user);
     HQ.toast('Goals saved! +20 XP 🎯');
-    HQ.addXP(user, 20);
+    HQ.addXP(user.id, 20);
     setTimeout(() => window.location.href = isNew ? 'dashboard.html' : 'profile.html', 600);
   };
 }

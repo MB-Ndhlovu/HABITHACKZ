@@ -1,4 +1,16 @@
-/* HealthQuest — Data storage layer (localStorage) */
+/* HealthQuest — Data storage layer (localStorage)
+
+Contract notes (after debug pass):
+  - addXP / addCoins / addCommunityPoints now accept (userId, amount) and
+    persist via updateUser internally. Callers should pass the user id.
+  - rankFromXP is the single source of truth for rank thresholds:
+      Bronze:0, Silver:500, Gold:2000, Platinum:5000, Diamond:10000
+    RANK_THRESHOLDS is kept in sync as [0, 500, 2000, 5000, 10000].
+  - checkBadgeUnlocks returns the user's updated badges array.
+  - completeQuest returns { ok, error? }.
+  - getCommunityPoints accepts either a township name or a userId.
+*/
+
 const HQ = {
   KEYS: {
     USERS: 'hq_users',
@@ -15,6 +27,29 @@ const HQ = {
     COMMUNITY_POINTS: 'hq_community_points',
     TOWNSHIPS: 'hq_townships',
     CHALLENGES: 'hq_challenges'
+  },
+
+  // Date helpers used across storage + quests
+  todayKey() {
+    return new Date().toISOString().split('T')[0];
+  },
+  weekKey() {
+    const d = new Date();
+    // ISO week: year + week number
+    const target = new Date(d.valueOf());
+    const dayNr = (d.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
+    const firstThursday = target.valueOf();
+    target.setMonth(0, 1);
+    if (target.getDay() !== 4) {
+      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+    }
+    const week = 1 + Math.ceil((firstThursday - target) / 604800000);
+    return d.getFullYear() + '-W' + String(week).padStart(2, '0');
+  },
+
+  findUserById(id) {
+    return this.getUsers().find(u => u.id === id) || null;
   },
 
   // Storage helpers
@@ -89,7 +124,7 @@ const HQ = {
     return this.fmtDate(ts);
   },
 
-  // Rank progression
+  // Rank progression — single source of truth
   RANKS: ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'],
   rankFromXP(xp) {
     if (xp >= 10000) return 'Diamond';
@@ -121,29 +156,26 @@ const HQ = {
   getStreak(userId) {
     return this.get(this.KEYS.STREAK + '_' + userId, { count: 0, lastDate: null });
   },
-  updateStreak(userId) {
-    const today = new Date().toISOString().split('T')[0];
-    const s = this.getStreak(userId);
-    if (s.lastDate === today) return s; // already counted
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    if (s.lastDate === yesterday) { s.count += 1; }
-    else { s.count = 1; }
-    s.lastDate = today;
-    this.set(this.KEYS.STREAK + '_' + userId, s);
-    return s;
+  setStreak(userId, streak) {
+    this.set(this.KEYS.STREAK + '_' + userId, streak);
+    return streak;
   },
-
-  // XP / Coins
-  addReward(userId, xp, coins) {
-    const u = this.getUsers().find(x => x.id === userId);
-    if (!u) return;
-    u.xp = (u.xp || 0) + xp;
-    u.coins = (u.coins || 0) + coins;
-    const newRank = this.rankFromXP(u.xp);
-    const promoted = newRank !== u.rank;
-    u.rank = newRank;
-    this.updateUser(userId, { xp: u.xp, coins: u.coins, rank: u.rank });
-    if (promoted) this.toast(`Promoted to ${newRank}!`);
+  updateStreak(userId) {
+    const user = this.findUserById(userId);
+    if (!user) return null;
+    const today = this.todayKey();
+    const streak = this.getStreak(userId);
+    if (streak.lastDate === today) return streak;
+    if (streak.lastDate) {
+      const last = new Date(streak.lastDate);
+      const now = new Date(today);
+      const diff = Math.round((now - last) / 86400000);
+      streak.count = (diff === 1) ? (streak.count || 0) + 1 : 1;
+    } else {
+      streak.count = 1;
+    }
+    streak.lastDate = today;
+    return this.setStreak(userId, streak);
   },
 
   // ID generator
@@ -180,8 +212,7 @@ const HQ = {
   }
 })();
 
-HQ.RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
-HQ.RANK_THRESHOLDS = [0, 100, 300, 700, 1500, 3000];
+HQ.RANK_THRESHOLDS = [0, 500, 2000, 5000, 10000];
 HQ.BADGES = [
   { id: 'first-quest', icon: '🎯', name: 'First Quest', check: (u) => (u.completedQuests || 0) >= 1 },
   { id: 'streak-7', icon: '🔥', name: '7-Day Streak', check: (u) => HQ.getStreak(u.id).count >= 7 },
@@ -199,27 +230,31 @@ HQ.rankIcon = function(rank) {
   return { Bronze: '🥉', Silver: '🥈', Gold: '🥇', Platinum: '💠', Diamond: '💎' }[rank] || '🥉';
 };
 
-HQ.addXP = function(user, amount) {
+HQ.addXP = function(userId, amount) {
+  const user = HQ.findUserById(userId);
+  if (!user) return;
   user.xp = (user.xp || 0) + amount;
   user.completedQuests = (user.completedQuests || 0) + 1;
-  for (let i = HQ.RANK_THRESHOLDS.length - 1; i >= 0; i--) {
-    if ((user.xp || 0) >= HQ.RANK_THRESHOLDS[i]) {
-      const newRank = HQ.RANKS[i] || 'Bronze';
-      if (newRank !== user.rank) user.rank = newRank;
-      break;
-    }
-  }
-  HQ.updateUser(user);
+  const newRank = HQ.rankFromXP(user.xp);
+  const promoted = newRank !== user.rank;
+  if (promoted) user.rank = newRank;
+  HQ.updateUser(userId, { xp: user.xp, rank: user.rank, completedQuests: user.completedQuests });
+  if (promoted) HQ.toast(`Promoted to ${newRank}!`);
+  HQ.checkBadgeUnlocks(user);
 };
 
-HQ.addCoins = function(user, amount) {
+HQ.addCoins = function(userId, amount) {
+  const user = HQ.findUserById(userId);
+  if (!user) return;
   user.coins = (user.coins || 0) + amount;
-  HQ.updateUser(user);
+  HQ.updateUser(userId, { coins: user.coins });
 };
 
-HQ.addCommunityPoints = function(user, amount) {
+HQ.addCommunityPoints = function(userId, amount) {
+  const u = HQ.findUserById(userId);
+  if (!u || !u.township) return;
   const map = HQ.get(HQ.KEYS.COMMUNITY_POINTS, {});
-  map[user.township] = (map[user.township] || 0) + amount;
+  map[u.township] = (map[u.township] || 0) + amount;
   HQ.set(HQ.KEYS.COMMUNITY_POINTS, map);
 };
 
@@ -232,25 +267,6 @@ HQ.addToTownship = function(township, amount) {
   }
 };
 
-HQ.updateStreak = function(userId) {
-  const user = HQ.findUserById(userId);
-  if (!user) return;
-  const today = HQ.todayKey();
-  const streak = HQ.getStreak(userId);
-  if (streak.lastDate === today) return;
-  if (streak.lastDate) {
-    const last = new Date(streak.lastDate);
-    const now = new Date(today);
-    const diff = Math.round((now - last) / 86400000);
-    if (diff === 1) streak.count = (streak.count || 0) + 1;
-    else streak.count = 1;
-  } else {
-    streak.count = 1;
-  }
-  streak.lastDate = today;
-  HQ.setStreak(userId, streak);
-};
-
 HQ.checkBadgeUnlocks = function(user) {
   user.badges = user.badges || [];
   HQ.BADGES.forEach(b => {
@@ -259,7 +275,8 @@ HQ.checkBadgeUnlocks = function(user) {
       HQ.toast(`🏅 Badge unlocked: ${b.name}`);
     }
   });
-  HQ.updateUser(user);
+  HQ.updateUser(user.id, { badges: user.badges });
+  return user.badges;
 };
 
 HQ.getTownshipRankings = function() {
@@ -289,6 +306,11 @@ HQ.logActivity = function(userId, activity) {
   const types = { walk: '🚶 Walk', run: '🏃 Run', soccer: '⚽ Soccer', gym: '🏋️ Gym' };
   const t = types[activity.type] || activity.type;
   const xp = this.activityXP(activity, activity.duration, activity.distance);
+  const userForLog = this.getUser(userId);
+  if (userForLog) {
+    userForLog.activitiesLogged = (userForLog.activitiesLogged || 0) + 1;
+    this.updateUser(userId, { activitiesLogged: userForLog.activitiesLogged });
+  }
   this.addXP(userId, xp);
   this.addCoins(userId, Math.floor(xp / 6));
   this.addCommunityPoints(userId, Math.floor(xp / 10));
@@ -372,11 +394,12 @@ HQ.getActivities = function(userId) {
 };
 
 HQ.activityXP = function(activity, duration, distance) {
+  const id = typeof activity === 'string' ? activity : (activity && activity.id);
   const dur = duration || 0;
   const dist = distance || 0;
-  if (activity === 'run') return Math.max(10, Math.round(dur * 1.5 + dist * 8));
-  if (activity === 'soccer') return Math.max(15, Math.round(dur * 1.2));
-  if (activity === 'gym') return Math.max(10, Math.round(dur * 1.0));
+  if (id === 'run') return Math.max(10, Math.round(dur * 1.5 + dist * 8));
+  if (id === 'soccer') return Math.max(15, Math.round(dur * 1.2));
+  if (id === 'gym') return Math.max(10, Math.round(dur * 1.0));
   return Math.max(8, Math.round(dur * 0.8 + dist * 6));
 };
 
@@ -402,6 +425,11 @@ HQ.logMedication = function(userId, medId, photoProof) {
   const med = meds.find(m => m.id === medId);
   logs.push({ id: this.uid(), medicationId: medId, name: med?.name, dose: med?.dose, takenAt: Date.now(), photoProof: photoProof || null });
   this.set(this.KEYS.MED_LOGS + '_' + userId, logs);
+  const medUser = this.getUser(userId);
+  if (medUser) {
+    medUser.medsTracked = (medUser.medsTracked || 0) + 1;
+    this.updateUser(userId, { medsTracked: medUser.medsTracked });
+  }
   this.addXP(userId, 15);
   this.addCoins(userId, 3);
   this.updateStreak(userId);
@@ -439,10 +467,17 @@ HQ.getCurrentMonthlyChallenges = function() {
 };
 
 HQ.getPosts = function() { return this.get(this.KEYS.POSTS, []); };
-HQ.addPost = function(author, township, content) {
+HQ.addPost = function(author, township, content, userId) {
   const posts = this.getPosts();
   posts.push({ id: this.uid(), author, township, content, likes: 0, comments: [], createdAt: Date.now() });
   this.set(this.KEYS.POSTS, posts);
+  if (userId) {
+    const u = this.getUser(userId);
+    if (u) {
+      u.postsMade = (u.postsMade || 0) + 1;
+      this.updateUser(userId, { postsMade: u.postsMade });
+    }
+  }
 };
 HQ.likePost = function(postId) {
   const posts = this.getPosts();
@@ -470,6 +505,11 @@ HQ.joinEvent = function(userId, eventId) {
   if (!list.includes(eventId)) {
     list.push(eventId);
     this.set(this.KEYS.JOINED_EVENTS + '_' + userId, list);
+    const eu = this.getUser(userId);
+    if (eu) {
+      eu.eventsJoined = (eu.eventsJoined || 0) + 1;
+      this.updateUser(userId, { eventsJoined: eu.eventsJoined });
+    }
     this.addXP(userId, 50);
     this.addCoins(userId, 15);
     this.checkBadgeUnlocks(this.getUser(userId));
@@ -490,14 +530,6 @@ HQ.isEventJoined = function(userId, eventId) {
   return this.get(this.KEYS.JOINED_EVENTS + '_' + userId, []).includes(eventId);
 };
 
-HQ.requireAuth = function() {
-  const session = this.getSession();
-  if (!session || !session.userId) return null;
-  const u = this.getUser(session.userId);
-  if (!u) { this.clearSession(); return null; }
-  return u;
-};
-
 HQ.getUser = function(id) {
   return this.getUsers().find(u => u.id === id) || null;
 };
@@ -512,9 +544,24 @@ HQ.editProfile = function(userId, updates) {
 
 HQ.completeQuest = function(userId, questId) {
   const user = this.getUser(userId);
-  if (!user) return;
-  user.completedQuests = (user.completedQuests || 0) + 1;
-  this.updateUser(userId, { completedQuests: user.completedQuests });
+  if (!user) return { ok: false, error: 'User not found' };
+  if (typeof this.getQuestsForUser !== 'function') return { ok: false, error: 'Quest system unavailable' };
+  const quests = this.getQuestsForUser(userId);
+  const quest = quests.find(q => q.id === questId);
+  if (!quest) return { ok: false, error: 'Quest not found' };
+  const today = this.todayKey();
+  if (quest.completedDates && quest.completedDates.includes(today)) {
+    return { ok: false, error: 'Quest already completed today' };
+  }
+  if (!quest.completedDates) quest.completedDates = [];
+  quest.completedDates.push(today);
+  this.saveQuestsForUser(userId, quests);
+  this.addXP(userId, quest.xp);
+  this.addCoins(userId, quest.coins);
+  this.updateStreak(userId);
+  this.checkBadgeUnlocks(this.getUser(userId));
+  HQ.toast(`+${quest.xp} XP, +${quest.coins} coins! `);
+  return { ok: true };
 };
 
 HQ.getCommunityPoints = function(township) {

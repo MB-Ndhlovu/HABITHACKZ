@@ -107,29 +107,10 @@ HQ.refreshQuestsForUser = function(userId) {
   HQ.saveQuestsForUser(userId, quests);
 };
 
+// Backwards-compatible alias for the canonical HQ.completeQuest.
+// dashboard.html uses this name; canonical impl lives in storage.js
+// so both quests.html and dashboard.html share one code path.
 HQ.completeQuestForUser = function(userId, questId) {
-  const user = HQ.findUserById(userId);
-  if (!user) return;
-  const quests = HQ.getQuestsForUser(userId);
-  const quest = quests.find(q => q.id === questId);
-  if (!quest) return;
-  const tk = HQ.todayKey();
-  if (quest.type === 'daily') {
-    if (quest.completedDates.includes(tk)) return;
-    quest.completedDates.push(tk);
-    HQ.saveQuestsForUser(userId, quests);
-    HQ.addXP(user, quest.xp);
-    HQ.addCoins(user, quest.coins);
-    HQ.updateStreak(user.id);
-    HQ.checkBadgeUnlocks(user);
-    HQ.toast(`+${quest.xp} XP, +${quest.coins} coins! 🎉`);
-  } else if (quest.type === 'weekly') {
-    if (quest.completedDates.includes(tk)) return;
-    quest.completedDates.push(tk);
-    HQ.saveQuestsForUser(userId, quests);
-    HQ.addXP(user, quest.xp);
-    HQ.addCoins(user, quest.coins);
-    HQ.checkBadgeUnlocks(user);
-    HQ.toast(`Weekly quest complete! +${quest.xp} XP 🎉`);
-  }
+  const r = HQ.completeQuest(userId, questId);
+  return r;
 };

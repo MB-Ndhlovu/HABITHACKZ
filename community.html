@@ -37,7 +37,7 @@ function render() {
         <div class="card highlight-card">
           <h2>Your Township</h2>
           <div class="township-name">${userTownship}</div>
-          <div class="community-points">${HQ.getCommunityPoints(user.id)} community pts</div>
+          <div class="community-points">${HQ.getCommunityPoints(user.township)} community pts</div>
           <button class="btn-small btn-primary" onclick="contributePoints()">+10 pts to my township</button>
         </div>
 

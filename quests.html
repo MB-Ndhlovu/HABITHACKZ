@@ -22,7 +22,7 @@ function render() {
   const all = HQ.getQuestsForUser(user.id);
   const daily = all.filter(q => q.type === 'daily');
   const weekly = all.filter(q => q.type === 'weekly');
-  const completedToday = daily.filter(q => q.completed).length;
+  const completedToday = daily.filter(q => q.completedDates && q.completedDates.includes(HQ.todayKey())).length;
 
   const result = `
     ${renderTopbar('🎯 Quests', user)}
@@ -36,7 +36,7 @@ function render() {
 
       <div class="section-header">
         <h2>📅 Daily Quests</h2>
-        <button class="btn-secondary" onclick="HQ.regenerateQuests('${user.id}'); render();">🔄 Refresh</button>
+        <button class="btn-secondary" onclick="HQ.refreshQuestsForUser('${user.id}'); render();">🔄 Refresh</button>
       </div>
       ${daily.map(q => questCard(q)).join('')}
 
@@ -62,7 +62,8 @@ function render() {
 }
 
 function questCard(q) {
-  if (q.completed) {
+  const tk = HQ.todayKey();
+  if (q.completedDates && q.completedDates.includes(tk)) {
     return `
       <div class="card quest-card completed">
         <div class="quest-icon">${q.icon}</div>
