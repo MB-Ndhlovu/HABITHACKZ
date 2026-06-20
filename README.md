@@ -110,12 +110,7 @@ This app was built following the **6 core SDLC processes** from the SAD textbook
 
 ---
 
-## 🎓 Team (Iteration 1)
 
-- 5 members, 2 technical
-- Roles and responsibilities documented in `HealthQuest_App_SAD_Plan.md`
-
----
 
 ## 📜 License
 
