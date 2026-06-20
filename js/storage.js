@@ -415,3 +415,48 @@ HQ.isEventSaved = function(userId, eventId) {
 HQ.isEventJoined = function(userId, eventId) {
   return this.get(this.KEYS.JOINED_EVENTS + '_' + userId, []).includes(eventId);
 };
+
+HQ.requireAuth = function() {
+  const session = this.getSession();
+  if (!session || !session.userId) return null;
+  const u = this.getUser(session.userId);
+  if (!u) { this.clearSession(); return null; }
+  return u;
+};
+
+HQ.getUser = function(id) {
+  return this.getUsers().find(u => u.id === id) || null;
+};
+
+HQ.getUserByUsername = function(username) {
+  return this.getUsers().find(u => u.username.toLowerCase() === username.toLowerCase());
+};
+
+HQ.editProfile = function(userId, updates) {
+  return this.updateUser(userId, updates);
+};
+
+HQ.completeQuest = function(userId, questId) {
+  const user = this.getUser(userId);
+  if (!user) return;
+  user.completedQuests = (user.completedQuests || 0) + 1;
+  this.updateUser(userId, { completedQuests: user.completedQuests });
+};
+
+HQ.getCommunityPoints = function(township) {
+  const map = this.get(this.KEYS.COMMUNITY_POINTS, {});
+  return map[township] || 0;
+};
+
+HQ.contribute = function(township, amount) {
+  const map = this.get(this.KEYS.COMMUNITY_POINTS, {});
+  map[township] = (map[township] || 0) + amount;
+  this.set(this.KEYS.COMMUNITY_POINTS, map);
+};
+
+HQ.contributeCommunityPoints = function(userId, amount) {
+  this.addToTownship(userId, amount || 10);
+  const u = this.getUser(userId);
+  this.updateUser(userId, { lastCommunityContribute: Date.now() });
+  return u;
+};
