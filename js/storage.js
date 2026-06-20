@@ -34,6 +34,29 @@ const HQ = {
   // live in js/quests.js. storage.js is loaded first, quests.js second, and
   // quests.js owns the canonical implementations. Don't redefine them here.
 
+  // Canonical todayKey / weekKey — these MUST live in storage.js because
+  // logActivity, logMedication, joinEvent, and other storage-level flows call
+  // updateStreak (which uses todayKey), and activity.html / medication.html /
+  // events.html do not load quests.js. Keeping them here avoids a hard
+  // dependency on quests.js for the activity-logging path.
+  todayKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  },
+  weekKey(d) {
+    d = d || new Date();
+    const target = new Date(d.valueOf());
+    const dayNr = (d.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
+    const firstThursday = new Date(target.getFullYear(), 0, 4);
+    const diff = (target - firstThursday) / 86400000;
+    const week = 1 + Math.floor(diff / 7);
+    return `${target.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  },
+
   findUserById(id) {
     return this.getUsers().find(u => u.id === id) || null;
   },
@@ -112,6 +135,12 @@ const HQ = {
 
   // Rank progression — single source of truth
   RANKS: ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'],
+  // Zombie Chase run distance targets (meters), scaled by rank
+  RUN_TARGETS: { Bronze: 1000, Silver: 1500, Gold: 2000, Platinum: 3000, Diamond: 4000 },
+  getRunTargetForUser(userId) {
+    const u = HQ.findUserById(userId);
+    return HQ.RUN_TARGETS[u && u.rank] || HQ.RUN_TARGETS.Bronze;
+  },
   rankFromXP(xp) {
     if (xp >= 10000) return 'Diamond';
     if (xp >= 5000) return 'Platinum';
@@ -209,7 +238,8 @@ HQ.BADGES = [
   { id: 'activities-10', icon: '💪', name: '10 Activities', check: (u) => (u.activitiesLogged || 0) >= 10 },
   { id: 'first-med', icon: '💊', name: 'Med Tracked', check: (u) => (u.medsTracked || 0) >= 1 },
   { id: 'first-post', icon: '📣', name: 'First Post', check: (u) => (u.postsMade || 0) >= 1 },
-  { id: 'community-join', icon: '🤝', name: 'Joined Event', check: (u) => (u.eventsJoined || 0) >= 1 }
+  { id: 'community-join', icon: '🤝', name: 'Joined Event', check: (u) => (u.eventsJoined || 0) >= 1 },
+  { id: 'survived-chase', icon: '🧟', name: 'Survived the Chase', check: (u) => (u.runsCompleted || 0) >= 1 },
 ];
 
 HQ.rankIcon = function(rank) {
@@ -285,11 +315,20 @@ HQ.logActivity = function(userId, activity) {
   const types = { walk: '🚶 Walk', run: '🏃 Run', soccer: '⚽ Soccer', gym: '🏋️ Gym' };
   const t = types[activity.type] || activity.type;
   const xp = this.activityXP(activity, activity.duration, activity.distance);
+
+  // IMPORTANT: bump per-run counters (activitiesLogged, runsCompleted, etc)
+  // BEFORE addXP, because addXP calls checkBadgeUnlocks and the badge
+  // predicates read user.runsCompleted / user.activitiesLogged.
   const userForLog = this.getUser(userId);
   if (userForLog) {
     userForLog.activitiesLogged = (userForLog.activitiesLogged || 0) + 1;
-    this.updateUser(userId, { activitiesLogged: userForLog.activitiesLogged });
+    if (activity.chase) userForLog.runsCompleted = (userForLog.runsCompleted || 0) + 1;
+    this.updateUser(userId, {
+      activitiesLogged: userForLog.activitiesLogged,
+      runsCompleted: userForLog.runsCompleted || 0,
+    });
   }
+
   this.addXP(userId, xp);
   this.addCoins(userId, Math.floor(xp / 6));
   this.addCommunityPoints(userId, Math.floor(xp / 10));
@@ -309,6 +348,41 @@ HQ.logActivity = function(userId, activity) {
     if (activityUser && activityUser.township) {
       this.addToTownship(activityUser.township, 5);
     }
+  }
+};
+
+// Returns medal tier reached for a given distance. Used by the run page
+// to render the result screen.
+HQ.calculateRunMedals = function(distanceMeters) {
+  const d = Math.max(0, Math.floor(distanceMeters || 0));
+  // Tier thresholds per spec §3.5:
+  //   250m  = bronze  (Tier I)
+  //   1000m = silver  (Tier II)
+  //   2000m = gold    (Tier III)
+  //   3000m = diamond (Tier IV)
+  // Return the highest tier reached.
+  if (d >= 3000) return { tier: 'diamond', name: 'Diamond', icon: '💎', color: '#7DD3FC' };
+  if (d >= 2000) return { tier: 'gold', name: 'Gold', icon: '🥇', color: '#FBBF24' };
+  if (d >= 1000) return { tier: 'silver', name: 'Silver', icon: '🥈', color: '#D1D5DB' };
+  if (d >= 250) return { tier: 'bronze', name: 'Bronze', icon: '🥉', color: '#B45309' };
+  return null;
+};
+
+HQ.recordZombieChaseRun = function(userId, outcome) {
+  if (!userId || !outcome) return;
+  if (outcome.result === 'win') {
+    // Log as a real activity so it counts toward quests, streak, township, and badges.
+    this.logActivity(userId, {
+      type: 'run',
+      chase: true,
+      duration: outcome.duration || 0,
+      distance: outcome.distance || 0,
+      steps: outcome.steps || 0,
+    });
+  } else if (outcome.result === 'caught') {
+    // No activity log (the user didn't complete the run), but streak is preserved
+    // because the run still counts as engagement.
+    this.updateStreak(userId);
   }
 };
 

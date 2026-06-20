@@ -151,25 +151,10 @@ HQ.QUEST_TEMPLATES = {
 
 /* ---------- Period keys ---------- */
 
-HQ.todayKey = function() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
-HQ.weekKey = function(d) {
-  d = d || new Date();
-  // ISO week number
-  const target = new Date(d.valueOf());
-  const dayNr = (d.getDay() + 6) % 7;            // Mon=0..Sun=6
-  target.setDate(target.getDate() - dayNr + 3);  // Thursday of this week
-  const firstThursday = new Date(target.getFullYear(), 0, 4);
-  const diff = (target - firstThursday) / 86400000;
-  const week = 1 + Math.floor(diff / 7);
-  return `${target.getFullYear()}-W${String(week).padStart(2, '0')}`;
-};
+// Note: HQ.todayKey() and HQ.weekKey() live in storage.js (canonical).
+// They must stay there because logActivity/logMedication/joinEvent depend on
+// todayKey, and those pages do not load quests.js. Keeping them in quests.js
+// alone would break the activity-logging path.
 
 /* ---------- Quest storage ---------- */
 

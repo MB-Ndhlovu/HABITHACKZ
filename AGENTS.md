@@ -22,6 +22,7 @@ HealthQuest is a static, browser-first gamified township health app. It currentl
 - `dashboard.html` — landing dashboard
 - `quests.html` — daily/weekly quests and badges
 - `activity.html` — activity logging
+- `run.html` — activity logging
 - `medication.html` — medication tracking and proof
 - `community.html` — township leaderboard, challenges, and feed
 - `events.html` — event discovery, save, and join

@@ -12,6 +12,7 @@ HealthQuest is a mobile-first web app that turns healthy living into a quest. It
 2. Create an account.
 3. Set your goals and interests.
 4. Use the dashboard, quests, activity, medication, community, events, and profile pages to test the flows.
+5. Explore the app's features and test the flows.
 
 No build step. No server. No install. Data currently persists in `localStorage`.
 
@@ -30,6 +31,8 @@ This repo now has a working static MVP slice with:
 - township rankings and feed posts
 - event saving and joining
 - profile editing and photo upload
+- community feed posts and likes
+- **Zombie Chase run game** (`run.html`) — to
 
 ---
 
