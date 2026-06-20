@@ -15,6 +15,9 @@
 const user = HQ.requireAuth();
 if (!user) throw new Error('not authed');
 
+// Track which posts have comments expanded so re-renders don't reset them
+const openComments = new Set();
+
 function render() {
   const rankings = HQ.getTownshipRankings();
   const challenges = HQ.getCurrentMonthlyChallenges();
@@ -86,8 +89,10 @@ function render() {
         </div>
 
         <div class="section-header"><h2>Community Feed</h2></div>
-        ${posts.map(p => `
-          <div class="card post-card">
+        ${posts.map(p => {
+          const isOpen = openComments.has(p.id);
+          return `
+          <div class="card post-card" data-post-id="${p.id}">
             <div class="post-header">
               <div class="post-avatar">${p.author.charAt(0)}</div>
               <div>
@@ -97,18 +102,21 @@ function render() {
             </div>
             <div class="post-content">${p.content}</div>
             <div class="post-actions">
-              <button class="post-action" onclick="likePost('${p.id}')">❤️ ${p.likes}</button>
-              <button class="post-action" onclick="toggleComments('${p.id}')">💬 ${p.comments.length}</button>
+              <button class="post-action" data-like-btn="${p.id}">❤️ <span data-like-count="${p.id}">${p.likes}</span></button>
+              <button class="post-action" data-comments-btn="${p.id}">💬 <span data-comment-count="${p.id}">${p.comments.length}</span></button>
             </div>
-            <div id="comments-${p.id}" class="post-comments" style="display:none">
-              ${p.comments.map(c => `<div class="comment"><strong>${c.user}:</strong> ${c.text}</div>`).join('')}
+            <div id="comments-${p.id}" class="post-comments" data-comments-for="${p.id}" style="display:${isOpen ? 'block' : 'none'}">
+              <div data-comments-list="${p.id}">
+                ${p.comments.map(c => `<div class="comment"><strong>${c.user}:</strong> ${c.text}</div>`).join('')}
+              </div>
               <div class="comment-input">
                 <input id="comment-input-${p.id}" placeholder="Add a comment...">
                 <button class="btn-small btn-primary" onclick="addComment('${p.id}')">Send</button>
               </div>
             </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     </div>
     ${renderBottomNav('community')}
@@ -130,28 +138,72 @@ window.createPost = function() {
   render();
 };
 
+// Surgical like update — no full re-render, preserves open threads and textarea state
 window.likePost = function(postId) {
   HQ.likePost(postId);
-  render();
+  const post = HQ.getPosts().find(p => p.id === postId);
+  if (!post) return;
+  const countEl = document.querySelector(`[data-like-count="${postId}"]`);
+  if (countEl) countEl.textContent = post.likes;
 };
 
 window.toggleComments = function(postId) {
   const el = document.getElementById('comments-' + postId);
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (!el) return;
+  const willOpen = el.style.display === 'none';
+  el.style.display = willOpen ? 'block' : 'none';
+  if (willOpen) {
+    openComments.add(postId);
+    // Focus the input when opening for nicer UX
+    const input = document.getElementById('comment-input-' + postId);
+    if (input) input.focus();
+  } else {
+    openComments.delete(postId);
+  }
 };
 
+// Surgical comment add — append the new comment, keep the input + thread open
 window.addComment = function(postId) {
   const input = document.getElementById('comment-input-' + postId);
+  if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   HQ.addComment(postId, user.fullName, text);
+  const post = HQ.getPosts().find(p => p.id === postId);
+  if (!post) return;
+  // Append the new comment node
+  const list = document.querySelector(`[data-comments-list="${postId}"]`);
+  if (list) {
+    const div = document.createElement('div');
+    div.className = 'comment';
+    div.innerHTML = `<strong>${post.comments[post.comments.length - 1].user}:</strong> ${post.comments[post.comments.length - 1].text}`;
+    list.appendChild(div);
+  }
+  // Bump the comment count
+  const countEl = document.querySelector(`[data-comment-count="${postId}"]`);
+  if (countEl) countEl.textContent = post.comments.length;
+  // Clear the input but keep focus & caret context, and keep the thread open
   input.value = '';
-  render();
+  openComments.add(postId);
+  const pane = document.getElementById('comments-' + postId);
+  if (pane) pane.style.display = 'block';
+  input.focus();
 };
 
 document.querySelectorAll = document.querySelectorAll;
-// Tab switching
+
+// Event delegation for like + comment-toggle buttons (works after every re-render)
 document.addEventListener('click', function(e) {
+  const likeBtn = e.target.closest('[data-like-btn]');
+  if (likeBtn) {
+    window.likePost(likeBtn.getAttribute('data-like-btn'));
+    return;
+  }
+  const commentsBtn = e.target.closest('[data-comments-btn]');
+  if (commentsBtn) {
+    window.toggleComments(commentsBtn.getAttribute('data-comments-btn'));
+    return;
+  }
   if (e.target.classList.contains('tab-btn')) {
     const tab = e.target.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === e.target));
