@@ -1,6 +1,6 @@
 # 🌿 HealthQuest — A Gamified Township Health & Fitness App
 
-HealthQuest is a mobile-first web app that turns healthy living into a quest. It was built for the **MCOA021 — Systems Analysis and Design** project.
+HealthQuest is a mobile-first web app that turns healthy living into a quest. .
 
 > ✨ *"Your town. Your health. Your quest."*
 
